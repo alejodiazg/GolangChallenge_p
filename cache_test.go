@@ -57,6 +57,12 @@ func assertInt(t *testing.T, expected int, actual int, msg string) {
 	}
 }
 
+func assertIntLessThan(t *testing.T, max int, count int, msg string) {
+	if max <= count {
+		t.Error(msg, fmt.Sprintf("expected : %v > %v, got : %v <=  %v", max, count, max, count))
+	}
+}
+
 func assertFloat(t *testing.T, expected float64, actual float64, msg string) {
 	if expected != actual {
 		t.Error(msg, fmt.Sprintf("expected : %v, got : %v", expected, actual))
@@ -169,4 +175,33 @@ func TestGetPricesFor_ParallelizeCalls(t *testing.T) {
 	if elapsedTime > (1200 * time.Millisecond) {
 		t.Error("calls took too long, expected them to take a bit over one second")
 	}
+}
+
+//TODO test errored calls
+
+//TODO add tests for number of calls to service when one item fails
+// Check that cache returns an error if external service returns an error
+func TestGetPriceFor_StopsSubRoutinesOnError(t *testing.T) {
+	mockService := &mockPriceService{
+		mockResults: map[string]mockResult{
+			"c1": {price: 1, err: nil},
+			"c2": {price: 1, err: nil},
+			"c3": {price: 1, err: nil},
+			"e1": {price: 0, err: fmt.Errorf("some error")},
+			"c4": {price: 1, err: nil},
+			"c5": {price: 1, err: nil},
+			"c6": {price: 1, err: nil},
+			"c7": {price: 1, err: nil},
+			"c8": {price: 1, err: nil},
+			"c9": {price: 1, err: nil},
+			"c10": {price: 1, err: nil},
+			"c11": {price: 1, err: nil},
+		},
+	}
+	cache := NewTransparentCache(mockService, time.Minute)
+	_, err := cache.GetPricesFor("c1", "c2", "c3", "e1", "c4", "c5", "c6", "c7", "c8", "c9", "c10", "c11")
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+	assertIntLessThan(t, 12, mockService.getNumCalls(), "wrong number of service calls")
 }
