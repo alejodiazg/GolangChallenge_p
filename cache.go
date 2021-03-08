@@ -22,11 +22,14 @@ type TransparentCache struct {
 	mapMt			   sync.Mutex
 }
 
+//priceCache is a structure that stores a price and the time it was stored at to be used in TransparentCache prices map
 type priceCache struct {
 	price float64
 	storedAt time.Time
 }
 
+//requestItem is a structure used to pass the tasks to the workers, indicating the index of the task for ordering
+//and the item code to search for in the cache or real service
 type requestItem struct {
 	index int
 	itemCode string
