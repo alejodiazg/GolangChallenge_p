@@ -35,33 +35,6 @@ func (m *mockPriceService) getNumCalls() int {
 	return m.numCalls
 }
 
-type mockPriceServiceNoErrorDelay struct {
-	numCalls    int
-	mockResults map[string]mockResult // what price and err to return for a particular itemCode
-	callDelay   time.Duration         // how long to sleep on each call so that we can simulate calls to be expensive
-}
-
-func (m *mockPriceServiceNoErrorDelay) GetPriceFor(itemCode string) (float64, error) {
-
-	m.numCalls++            // increase the number of calls
-	result, ok := m.mockResults[itemCode]
-
-
-
-	if !ok {
-		panic(fmt.Errorf("bug in the tests, we didn't have a mock result for [%v]", itemCode))
-	}
-
-	if result.err == nil {
-		time.Sleep(m.callDelay) // sleep to simulate expensive call
-	}
-	return result.price, result.err
-}
-
-func (m *mockPriceServiceNoErrorDelay) getNumCalls() int {
-	return m.numCalls
-}
-
 func getPriceWithNoErr(t *testing.T, cache *TransparentCache, itemCode string) float64 {
 	price, err := cache.GetPriceFor(itemCode)
 	if err != nil {
