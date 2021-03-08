@@ -35,6 +35,33 @@ func (m *mockPriceService) getNumCalls() int {
 	return m.numCalls
 }
 
+type mockPriceServiceNoErrorDelay struct {
+	numCalls    int
+	mockResults map[string]mockResult // what price and err to return for a particular itemCode
+	callDelay   time.Duration         // how long to sleep on each call so that we can simulate calls to be expensive
+}
+
+func (m *mockPriceServiceNoErrorDelay) GetPriceFor(itemCode string) (float64, error) {
+
+	m.numCalls++            // increase the number of calls
+	result, ok := m.mockResults[itemCode]
+
+
+
+	if !ok {
+		panic(fmt.Errorf("bug in the tests, we didn't have a mock result for [%v]", itemCode))
+	}
+
+	if result.err == nil {
+		time.Sleep(m.callDelay) // sleep to simulate expensive call
+	}
+	return result.price, result.err
+}
+
+func (m *mockPriceServiceNoErrorDelay) getNumCalls() int {
+	return m.numCalls
+}
+
 func getPriceWithNoErr(t *testing.T, cache *TransparentCache, itemCode string) float64 {
 	price, err := cache.GetPriceFor(itemCode)
 	if err != nil {
@@ -177,11 +204,7 @@ func TestGetPricesFor_ParallelizeCalls(t *testing.T) {
 	}
 }
 
-//TODO test errored calls
-
-//TODO add tests for number of calls to service when one item fails
-// Check that cache returns an error if external service returns an error
-func TestGetPriceFor_StopsSubRoutinesOnError(t *testing.T) {
+func TestGetPricesFor_ReturnsErrorOnServiceError(t *testing.T) {
 	mockService := &mockPriceService{
 		mockResults: map[string]mockResult{
 			"c1": {price: 1, err: nil},
@@ -203,5 +226,22 @@ func TestGetPriceFor_StopsSubRoutinesOnError(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error, got nil")
 	}
-	assertIntLessThan(t, 12, mockService.getNumCalls(), "wrong number of service calls")
+}
+
+func TestGetPricesFor_ReturnsPricesOnError(t *testing.T) {
+	mockService := &mockPriceService{
+		mockResults: map[string]mockResult{
+			"c1": {price: 1, err: nil},
+			"c2": {price: 2, err: nil},
+			"c3": {price: 3, err: nil},
+			"e1": {price: 0, err: fmt.Errorf("some error")},
+			"c4": {price: 4, err: nil},
+		},
+	}
+	cache := NewTransparentCache(mockService, time.Minute)
+	prices, err := cache.GetPricesFor("c1", "c2", "c3", "e1", "c4")
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+	assertFloats(t, []float64{1,2,3,0,4}, prices, "wrong price returned")
 }

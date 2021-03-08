@@ -77,7 +77,6 @@ func (c* TransparentCache) runGetPricesWorkers(results []float64, itemCodes []st
 	//create the channels
 	errorChannel := make(chan error)
 	waitDoneChannel := make(chan bool)
-	stopWorkersChannel := make(chan struct{})
 	jobsChannel := make(chan *requestItem)
 
 	var err error
@@ -91,7 +90,7 @@ func (c* TransparentCache) runGetPricesWorkers(results []float64, itemCodes []st
 
 	for wc := 0 ; wc < workerCount ; wc++ {
 		wg.Add(1)
-		go c.getPricesWorker(results, jobsChannel, errorChannel, stopWorkersChannel, &wg)
+		go c.pricesWorker(results, jobsChannel, errorChannel, &wg)
 	}
 
 	//wait for the wait group to finish and let the channel know
@@ -100,8 +99,6 @@ func (c* TransparentCache) runGetPricesWorkers(results []float64, itemCodes []st
 		close(waitDoneChannel)
 	}()
 
-	//TODO change this to a consumer / worker so theres only one inifinite loop
-	//create array of float 64 that is the size of the itemCodes list
 	for index, itemCode := range itemCodes {
 		jobsChannel <- &requestItem{
 			index:    index,
@@ -120,31 +117,19 @@ func (c* TransparentCache) runGetPricesWorkers(results []float64, itemCodes []st
 	}
 
 	close(errorChannel)
-	close(stopWorkersChannel)
 	return err
 }
 
-//getPricesWorker executes the logic to get the  the prices for an item and stores the result in the results array
+//pricesWorker executes the logic to get the  the prices for an item and stores the result in the results array
 //in the correct index position given by the index given by the itemsChannel
-func (c *TransparentCache) getPricesWorker(results []float64, itemsChannel chan *requestItem, errorChannel chan error, stopChannel chan struct{}, wg *sync.WaitGroup) {
+func (c *TransparentCache) pricesWorker(results []float64, itemsChannel chan *requestItem, errorChannel chan error, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for {
-		select {
-			case  _ , open := <-stopChannel:
-				if !open {
-					return
-				}
-			case item := <-itemsChannel:
-				if item != nil {
-					price, err := c.GetPriceFor(item.itemCode)
-					if err != nil {
-						errorChannel <- err
-					} else {
-						results[item.index] =  price
-					}
-				} else {
-					return
-				}
+	for item := range itemsChannel {
+		price, err := c.GetPriceFor(item.itemCode)
+		if err != nil {
+			errorChannel <- err
+		} else {
+			results[item.index] =  price
 		}
 	}
 }
